@@ -1,7 +1,9 @@
 #define _POSIX_C_SOURCE 200809L
 #include <curl/curl.h>
 #include <errno.h>
+#include <limits.h>
 #include <poll.h>
+#include <pwd.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -27,6 +29,7 @@ enum sfd_event {
 };
 
 struct sfd_state {
+	char steam_path[PATH_MAX];
     struct pollfd fds[SFD_EVENT_COUNT];
     sd_bus* bus;
     sd_bus_slot *xdg_slot;
@@ -63,7 +66,9 @@ static void spawn_async_no_shell(char *argv[]) {
 	waitpid(child, NULL, 0);
 }
 
-static void send_notification(uid_t euid, pid_t pid, const char *app_name, const char *summary, const char *body) {
+static void send_notification(struct sfd_state *state,
+	uid_t euid, pid_t pid, const char *app_name,
+	const char *summary, const char *body) {
     char url_string[4096];
     {
         char *urlencoded_app_name = curl_escape(app_name, strlen(app_name));
@@ -82,14 +87,15 @@ static void send_notification(uid_t euid, pid_t pid, const char *app_name, const
         curl_free(urlencoded_body);
     }
 
-    printf("Launching: steam %s\n", url_string);
 
     char *argv[] =
     {
-        "steam",
+        state->steam_path,
+		"-ifrunning",
         url_string,
         NULL,
     };
+    printf("Launching: %s %s %s\n", argv[0], argv[1], argv[2]);
     return spawn_async_no_shell(argv);
 }
 
@@ -164,7 +170,7 @@ static int handle_notify(sd_bus_message *msg, void *data,
         printf("(%d:%d) %s: %s\n", euid, pid, app_name, summary);
     }
 
-    send_notification(euid, pid, app_name, summary, body);
+    send_notification(state, euid, pid, app_name, summary, body);
 
     return sd_bus_reply_method_return(msg, "u", ++state->last_notif_id);
 }
@@ -237,6 +243,17 @@ static int init_signalfd() {
 	return sfd;
 }
 
+static void init_steam_path(struct sfd_state *state) {
+	const char *homedir;
+	if ((homedir = getenv("HOME")) == NULL) {
+		homedir = getpwuid(getuid())->pw_dir;
+	}
+
+	snprintf(state->steam_path, sizeof(state->steam_path),
+		"%s/.steam/root/ubuntu12_32/steam",
+		homedir);
+}
+
 static bool init_dbus(struct sfd_state *state) {
     int ret = 0;
 
@@ -275,6 +292,8 @@ static void finish_state(struct sfd_state *state) {
 }
 
 static bool init_state(struct sfd_state *state) {
+	init_steam_path(state);
+
     if (!init_dbus(state)) {
         finish_state(state);
         return false;
