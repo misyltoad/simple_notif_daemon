@@ -63,7 +63,7 @@ static void spawn_async_no_shell(char *argv[]) {
 	waitpid(child, NULL, 0);
 }
 
-static void send_notification(const char *app_name, const char *summary, const char *body) {
+static void send_notification(uid_t euid, pid_t pid, const char *app_name, const char *summary, const char *body) {
     char url_string[4096];
     {
         char *urlencoded_app_name = curl_escape(app_name, strlen(app_name));
@@ -71,7 +71,8 @@ static void send_notification(const char *app_name, const char *summary, const c
         char *urlencoded_body = curl_escape(body, strlen(body));
 
         snprintf(url_string, sizeof(url_string),
-            "steam://xdg_notification/?app_name=%s&summary=%s&body=%s",
+            "steam://xdg_notification/?euid=%d&pid=%d&app_name=%s&summary=%s&body=%s",
+			euid, pid,
             urlencoded_app_name,
             urlencoded_summary,
             urlencoded_body);
@@ -126,7 +127,10 @@ static int handle_get_capabilities(sd_bus_message *msg, void *data,
 static int handle_notify(sd_bus_message *msg, void *data,
 		sd_bus_error *ret_error) {
 	struct sfd_state *state = data;
+	sd_bus_creds *creds;
 	int ret = 0;
+	uid_t euid;
+	pid_t pid;
 
 	const char *app_name, *app_icon, *summary, *body;
 	uint32_t replaces_id;
@@ -136,13 +140,31 @@ static int handle_notify(sd_bus_message *msg, void *data,
 		return ret;
 	}
 
+	ret = sd_bus_query_sender_creds(msg, SD_BUS_CREDS_EUID | SD_BUS_CREDS_PID, &creds);
+	if (ret < 0) {
+		fprintf(stderr, "Could not get message credentials: %s\n", strerror(errno));
+		return ret;
+	}
+
+	ret = sd_bus_creds_get_pid(creds, &pid);
+	if (ret < 0) {
+		fprintf(stderr, "Could not get message creds pid: %s\n", strerror(errno));
+		return ret;
+	}
+
+	ret = sd_bus_creds_get_euid(creds, &euid);
+	if (ret < 0) {
+		fprintf(stderr, "Could not get message creds euid: %s\n", strerror(errno));
+		return ret;
+	}
+
     if (*body) {
-        printf("%s: %s - %s\n", app_name, summary, body);
+        printf("(%d:%d) %s: %s - %s\n", euid, pid, app_name, summary, body);
     } else {
-        printf("%s: %s\n", app_name, summary);
+        printf("(%d:%d) %s: %s\n", euid, pid, app_name, summary);
     }
 
-    send_notification(app_name, summary, body);
+    send_notification(euid, pid, app_name, summary, body);
 
     return sd_bus_reply_method_return(msg, "u", ++state->last_notif_id);
 }
