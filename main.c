@@ -88,7 +88,7 @@ static void send_notification(struct sfd_state *state,
         char *urlencoded_body = curl_escape(body, strlen(body));
 
         snprintf(url_string, sizeof(url_string),
-            "steam://xdg_notification/?euid=%d&pid=%d&notif_id=%u&app_name=%s&summary=%s&body=%s",
+            "steam://open_xdg_notification/?euid=%d&pid=%d&notif_id=%u&app_name=%s&summary=%s&body=%s",
 			euid, pid, notif_id,
             urlencoded_app_name,
             urlencoded_summary,
