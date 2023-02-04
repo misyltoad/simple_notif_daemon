@@ -67,8 +67,8 @@ static void spawn_async_no_shell(char *argv[]) {
 }
 
 static void send_notification(struct sfd_state *state,
-	uid_t euid, pid_t pid, const char *app_name,
-	const char *summary, const char *body) {
+	uid_t euid, pid_t pid, uint32_t notif_id,
+	const char *app_name, const char *summary, const char *body) {
     char url_string[4096];
     {
         char *urlencoded_app_name = curl_escape(app_name, strlen(app_name));
@@ -76,8 +76,8 @@ static void send_notification(struct sfd_state *state,
         char *urlencoded_body = curl_escape(body, strlen(body));
 
         snprintf(url_string, sizeof(url_string),
-            "steam://xdg_notification/?euid=%d&pid=%d&app_name=%s&summary=%s&body=%s",
-			euid, pid,
+            "steam://xdg_notification/?euid=%d&pid=%d&notif_id=%u&app_name=%s&summary=%s&body=%s",
+			euid, pid, notif_id,
             urlencoded_app_name,
             urlencoded_summary,
             urlencoded_body);
@@ -134,6 +134,7 @@ static int handle_notify(sd_bus_message *msg, void *data,
 		sd_bus_error *ret_error) {
 	struct sfd_state *state = data;
 	sd_bus_creds *creds;
+	uint32_t notif_id;
 	int ret = 0;
 	uid_t euid;
 	pid_t pid;
@@ -170,9 +171,11 @@ static int handle_notify(sd_bus_message *msg, void *data,
         printf("(%d:%d) %s: %s\n", euid, pid, app_name, summary);
     }
 
-    send_notification(state, euid, pid, app_name, summary, body);
+	notif_id = ++state->last_notif_id;
 
-    return sd_bus_reply_method_return(msg, "u", ++state->last_notif_id);
+    send_notification(state, euid, pid, notif_id, app_name, summary, body);
+
+    return sd_bus_reply_method_return(msg, "u", notif_id);
 }
 
 static int handle_close_notification(sd_bus_message *msg, void *data,
