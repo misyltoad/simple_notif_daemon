@@ -1,4 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
+#include <curl/curl.h>
 #include <errno.h>
 #include <poll.h>
 #include <signal.h>
@@ -32,6 +33,64 @@ struct sfd_state {
     int signalfd;
     uint32_t last_notif_id;
 };
+
+static void spawn_async_no_shell(char *argv[]) {
+	/* Avoid zombie processes by using a double-fork, whereby the
+	 * grandchild becomes orphaned & the responsibility of the OS. */
+	pid_t child = 0, grandchild = 0;
+
+	child = fork();
+	switch (child) {
+	case -1:
+		fprintf(stderr, "unable to fork()\n");
+		return;
+	case 0:
+		setsid();
+		sigset_t set;
+		sigemptyset(&set);
+		sigprocmask(SIG_SETMASK, &set, NULL);
+		grandchild = fork();
+		if (grandchild == 0) {
+			execvp(argv[0], argv);
+			_exit(0);
+		} else if (grandchild < 0) {
+			fprintf(stderr, "unable to fork()\n");
+		}
+		_exit(0);
+	default:
+		break;
+	}
+	waitpid(child, NULL, 0);
+}
+
+static void send_notification(const char *app_name, const char *summary, const char *body) {
+    char url_string[4096];
+    {
+        char *urlencoded_app_name = curl_escape(app_name, strlen(app_name));
+        char *urlencoded_summary = curl_escape(summary, strlen(summary));
+        char *urlencoded_body = curl_escape(body, strlen(body));
+
+        snprintf(url_string, sizeof(url_string),
+            "steam://xdg_notification/?app_name=%s&summary=%s&body=%s",
+            urlencoded_app_name,
+            urlencoded_summary,
+            urlencoded_body);
+
+        curl_free(urlencoded_app_name);
+        curl_free(urlencoded_summary);
+        curl_free(urlencoded_body);
+    }
+
+    printf("Launching: steam %s\n", url_string);
+
+    char *argv[] =
+    {
+        "steam",
+        url_string,
+        NULL,
+    };
+    return spawn_async_no_shell(argv);
+}
 
 static const char *service_name = "org.freedesktop.Notifications";
 static const char *service_interface = "org.freedesktop.Notifications";
@@ -82,6 +141,8 @@ static int handle_notify(sd_bus_message *msg, void *data,
     } else {
         printf("%s: %s\n", app_name, summary);
     }
+
+    send_notification(app_name, summary, body);
 
     return sd_bus_reply_method_return(msg, "u", ++state->last_notif_id);
 }
