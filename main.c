@@ -66,6 +66,18 @@ static void spawn_async_no_shell(char *argv[]) {
 	waitpid(child, NULL, 0);
 }
 
+static void send_to_steam(struct sfd_state *state, char *url_string) {
+    char *argv[] =
+    {
+        state->steam_path,
+		"-ifrunning",
+        url_string,
+        NULL,
+    };
+    printf("Launching: %s %s %s\n", argv[0], argv[1], argv[2]);
+    return spawn_async_no_shell(argv);
+}
+
 static void send_notification(struct sfd_state *state,
 	uid_t euid, pid_t pid, uint32_t notif_id,
 	const char *app_name, const char *summary, const char *body) {
@@ -87,16 +99,7 @@ static void send_notification(struct sfd_state *state,
         curl_free(urlencoded_body);
     }
 
-
-    char *argv[] =
-    {
-        state->steam_path,
-		"-ifrunning",
-        url_string,
-        NULL,
-    };
-    printf("Launching: %s %s %s\n", argv[0], argv[1], argv[2]);
-    return spawn_async_no_shell(argv);
+	send_to_steam(state, url_string);
 }
 
 static const char *service_name = "org.freedesktop.Notifications";
