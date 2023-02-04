@@ -102,6 +102,15 @@ static void send_notification(struct sfd_state *state,
 	send_to_steam(state, url_string);
 }
 
+static void close_notification(struct sfd_state *state, uint32_t notif_id) {
+	char url_string[4096];
+	snprintf(url_string, sizeof(url_string),
+		"steam://close_xdg_notification/?notif_id=%u",
+		notif_id);
+
+	send_to_steam(state, url_string);
+}
+
 static const char *service_name = "org.freedesktop.Notifications";
 static const char *service_interface = "org.freedesktop.Notifications";
 static const char *service_path = "/org/freedesktop/Notifications";
@@ -183,13 +192,14 @@ static int handle_notify(sd_bus_message *msg, void *data,
 
 static int handle_close_notification(sd_bus_message *msg, void *data,
 		sd_bus_error *ret_error) {
+	struct sfd_state *state = data;
 	uint32_t id;
 	int ret = sd_bus_message_read(msg, "u", &id);
 	if (ret < 0) {
 		return ret;
 	}
 
-    /* do nothing. */
+	close_notification(state, id);
 
 	return sd_bus_reply_method_return(msg, "");
 }
