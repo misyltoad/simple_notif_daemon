@@ -42,13 +42,3 @@ executable(
 	],
 	install: true,
 )
-
-conf_data = configuration_data()
-conf_data.set('bindir', get_option('prefix') / get_option('bindir'))
-
-configure_file(
-	configuration: conf_data,
-	input: 'es.froggi.steam_notif_daemon.service.in',
-	output: '@BASENAME@',
-	install_dir: get_option('datadir') + '/dbus-1/services',
-)
