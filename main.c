@@ -75,6 +75,7 @@ static void send_to_steam(struct sfd_state *state, char *url_string) {
         NULL,
     };
     printf("Launching: %s %s %s\n", argv[0], argv[1], argv[2]);
+	fflush(stdout);
     return spawn_async_no_shell(argv);
 }
 
